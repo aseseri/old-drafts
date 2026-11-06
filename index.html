@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<title>Puzzle Box</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root { --bg: #f7f7f5; --ink: #17171b; --muted: #74747c; --line: #e6e5e0; --surface: #ffffff; --fade: 400ms; }
+  body[data-theme="ask"]  { --bg: #b896d4; --ink: #000000; --muted: #2c2138; --line: rgba(0,0,0,.25); --surface: #ffffff; }
+  body[data-theme="word"] { --bg: #eef0f6; --ink: #1c2233; --muted: #6c7386; --line: #d6dae6; --surface: #ffffff; }
+  body[data-theme="wait"] { --bg: #131316; --ink: #f4f4f5; --muted: #8e8e96; --line: #2c2c31; --surface: #1d1d21; }
+  body[data-theme="open"] { --bg: #faf6ef; --ink: #33261d; --muted: #8a7767; --line: #eadfce; --surface: #ffffff; }
+
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    min-height: 100vh; min-height: 100dvh;
+    background: var(--bg); color: var(--ink);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    transition: background-color 600ms ease, color 600ms ease;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
+    padding: max(44px, env(safe-area-inset-top)) 16px max(44px, env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { touch-action: manipulation; cursor: pointer; }
+
+  .steps { display: flex; gap: 6px; width: min(calc(100% - 32px), 200px); position: absolute; top: max(18px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1; }
+  .steps span { flex: 1; height: 4px; border-radius: 2px; background: currentColor; opacity: .16; transition: opacity 400ms ease; }
+  .steps span.lit { opacity: 1; }
+
+  .layer {
+    display: none; opacity: 0; transform: translateY(8px);
+    transition: opacity var(--fade) ease, transform var(--fade) ease;
+    width: 100%; max-width: 520px; flex-direction: column; align-items: center; justify-content: center; position: relative; z-index: 1;
+  }
+  .layer.on { display: flex; }
+  .layer.visible { opacity: 1; transform: none; }
+
+  h1 { font-size: clamp(20px, 5.2vw, 26px); line-height: 1.25; letter-spacing: -.012em; font-weight: 500; text-align: center; margin-bottom: 16px; text-wrap: balance; }
+
+  /* Layer 1 */
+  #tray {
+    position: relative; width: min(100%, 46vh); aspect-ratio: 5 / 8; overflow: hidden; cursor: pointer;
+    border-radius: 20px; background: var(--surface); border: 1px solid var(--line);
+    -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+  }
+  #tray img { position: absolute; height: auto; pointer-events: none; }
+
+  /* Layer 2: Valkyries violet and black, with the logo behind. */
+  #logo {
+    position: fixed; left: 50%; top: 50%; width: min(86vw, 64vh); height: auto; transform: translate(-50%, -50%);
+    opacity: 0; pointer-events: none; transition: opacity 600ms ease;
+  }
+  body[data-theme="ask"] #logo { opacity: .16; }
+  #ask h1 { font-size: clamp(24px, 6.4vw, 32px); line-height: 1.2; margin-bottom: 22px; }
+  #askForm { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  #askForm input {
+    width: 100%; font-size: 17px; padding: 15px 16px; border-radius: 10px; border: 0;
+    background: var(--surface); color: #000;
+  }
+  #askForm input::placeholder { color: #77727d; }
+  #askForm input:focus { outline: 2px solid #000; outline-offset: 1px; }
+  #askForm button { padding: 15px; border: 0; border-radius: 10px; font-weight: 500; font-size: 16px; background: #000; color: #fff; }
+
+  /* Layer 3 */
+  #board { display: grid; gap: 7px; margin: 0 0 20px; }
+  .row { display: grid; grid-template-columns: repeat(5, auto); gap: 7px; }
+  .row.shake { animation: shake 320ms ease; }
+  .tile {
+    --size: min(14vw, 7.2vh, 56px);
+    width: var(--size); height: var(--size); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500; font-size: calc(var(--size) * .42);
+    background: var(--surface); box-shadow: 0 1px 2px rgba(28,34,51,.1), inset 0 0 0 1px var(--line);
+  }
+  .tile.flip { animation: pop 420ms ease; }
+  .tile.hit  { background: #1fa971; color: #fff; box-shadow: none; }
+  .tile.near { background: #f3b52f; color: #2a1e00; box-shadow: none; }
+  .tile.miss { background: #7a8195; color: #fff; box-shadow: none; }
+  #keys { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .keyrow { display: flex; gap: 5px; justify-content: center; }
+  .keyrow button {
+    flex: 1 1 0; min-width: 0; max-width: 44px; height: 48px; padding: 0; border: 0; border-radius: 10px;
+    font-size: 15px; font-weight: 400; text-transform: uppercase;
+    background: var(--surface); box-shadow: 0 1px 2px rgba(28,34,51,.14);
+  }
+  .keyrow button.wide { flex: 1.6 1 0; max-width: 70px; font-size: 13px; text-transform: none; }
+  .keyrow button.hit  { background: #1fa971; color: #fff; }
+  .keyrow button.near { background: #f3b52f; color: #2a1e00; }
+  .keyrow button.miss { background: #c9cdd8; color: #6c7386; box-shadow: none; }
+
+  /* Loading */
+  #plank { display: block; width: 100%; height: auto; border-radius: 16px; }
+  #bar { width: 100%; height: 6px; margin-top: 20px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  #barFill { height: 100%; width: 0; background: #fff; border-radius: 3px; }
+  #pct { font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--muted); margin-top: 12px; }
+
+  /* Layer 4 */
+  #boxBtn { background: none; border: 0; padding: 0; width: min(78vw, 340px); border-radius: 12px; }
+  #boxBtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+  #boxBtn[disabled] { cursor: default; }
+  #boxBtn svg { display: block; width: 100%; height: auto; overflow: visible; }
+  #lid { transform-box: fill-box; transform-origin: center; transition: transform 1500ms cubic-bezier(.3,.7,.3,1), opacity 1200ms ease 300ms; }
+  #cat { transform: translate(160px, 170px); }
+  .opened #lid { transform: translate(40px, -92px) rotate(16deg); opacity: 0; }
+  .stateA { animation: stateA 3.4s ease-in-out infinite; }
+  .opened .stateA { animation: none; opacity: 0; transition: opacity 500ms ease; }
+  .settled #catTail { transform-box: fill-box; transform-origin: 0% 100%; animation: swish 3.2s ease-in-out infinite; }
+  .settled #catEyes { transform-box: fill-box; transform-origin: center; animation: blink 5.2s linear infinite; }
+  /* takes no space until revealed, so the box itself sits in the exact centre */
+  #note {
+    width: 100%; max-height: 0; margin-top: 0; padding: 0 24px; border-radius: 18px; overflow: hidden;
+    background: var(--surface); box-shadow: 0 14px 40px rgba(90,60,30,.1), inset 0 0 0 1px var(--line);
+    font-size: 18px; font-weight: 400; line-height: 1.55; white-space: pre-wrap; text-align: center;
+    opacity: 0; visibility: hidden;
+    transition: opacity 1400ms ease, max-height 1100ms ease, margin-top 1100ms ease, padding 1100ms ease;
+  }
+  #note.visible { opacity: 1; visibility: visible; max-height: 80vh; margin-top: 24px; padding: 26px 24px; overflow: auto; }
+
+  /* Fail */
+  #fail {
+    position: fixed; inset: 0; z-index: 10; padding: 32px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    background: #111114; color: #fff;
+    opacity: 0; visibility: hidden; transition: opacity 250ms ease, visibility 250ms;
+    font-size: clamp(22px, 6vw, 34px); line-height: 1.25; letter-spacing: -.012em; font-weight: 500; text-wrap: balance;
+  }
+  #fail.visible { opacity: 1; visibility: visible; }
+
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  @keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(.82); } 75% { transform: scale(1.06); } 100% { transform: scale(1); } }
+  @keyframes stateA { 0%, 100% { opacity: 0; } 45%, 55% { opacity: 1; } }
+  @keyframes swish { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(9deg); } }
+  @keyframes blink { 0%, 95%, 100% { transform: scaleY(1); } 97.5% { transform: scaleY(.08); } }
+  @media (prefers-reduced-motion: reduce) {
+    .tile.flip, .row.shake, .settled #catTail, .settled #catEyes { animation: none; }
+    .stateA { animation-duration: 8s; }
+    #lid, #note { transition-duration: 1ms; transition-delay: 0ms; }
+  }
+</style>
+</head>
+<body data-theme="find">
+  <img id="logo" src="pieces/logo.svg" alt="" hidden onload="this.hidden = false">
+  <div class="steps" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+
+  <section class="layer" id="find">
+    <h1>Find Bob the Builder</h1>
+    <div id="tray" role="img" aria-label="A pile of characters and tools"></div>
+  </section>
+
+  <section class="layer" id="ask">
+    <h1>Who is my favorite player on the Valkyries?</h1>
+    <form id="askForm" autocomplete="off">
+      <input id="askInput" type="text" aria-label="Your answer" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Full name">
+      <button type="submit">Submit</button>
+    </form>
+  </section>
+
+  <section class="layer" id="word">
+    <div id="board"></div>
+    <div id="keys"></div>
+  </section>
+
+  <section class="layer" id="wait">
+    <svg id="plank" viewBox="0 0 360 220" aria-hidden="true">
+      <defs>
+        <filter id="grain" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.009 0.22" numOctaves="4" seed="7"/>
+          <feColorMatrix values="0 0 0 0 .20  0 0 0 0 .09  0 0 0 0 .03  .9 0 0 0 -.12"/>
+          <feComposite in2="SourceGraphic" operator="in"/>
+          <feBlend in2="SourceGraphic" mode="multiply"/>
+        </filter>
+        <radialGradient id="toolGlow"><stop offset="0" stop-color="#ffe9b0"/><stop offset=".35" stop-color="#ffbf5e" stop-opacity=".65"/><stop offset="1" stop-color="#ffbf5e" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="360" height="220" fill="#b67a48" filter="url(#grain)"/>
+      <g id="cuts" fill="none" stroke-linecap="round" stroke-linejoin="round"></g>
+      <g id="chips"></g>
+      <g id="tool"><circle id="bit" r="14" fill="url(#toolGlow)"/><circle r="3.2" fill="#fff6dd" stroke="#6b4a1e"/></g>
+    </svg>
+    <div id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="barFill"></div></div>
+    <p id="pct">0%</p>
+  </section>
+
+  <section class="layer" id="open">
+    <button id="boxBtn" type="button" aria-label="Open the box">
+      <svg viewBox="0 60 320 278" role="img" aria-hidden="true">
+        <defs>
+          <clipPath id="inside"><rect x="0" y="-200" width="320" height="462"/></clipPath>
+          <clipPath id="catBodyShape"><path d="M-37 140C-46 100-28 68 0 68S46 100 37 140C24 151-24 151-37 140Z"/></clipPath>
+          <clipPath id="catHeadShape"><ellipse cx="0" cy="44" rx="45" ry="39"/></clipPath>
+        </defs>
+        <rect id="boxBack" x="66" y="152" width="188" height="30" fill="#6e452a"/>
+        <g id="catBehind" clip-path="url(#inside)">
+          <!-- calico. Local origin: top centre of the head, paws at y=150 -->
+          <g id="cat">
+            <g id="catTail" fill="none">
+              <path d="M30 136C68 142 82 106 64 84" stroke="#c9bba6" stroke-width="15" stroke-linecap="round"/>
+              <path d="M30 136C68 142 82 106 64 84" stroke="#fbf6ec" stroke-width="12.500" stroke-linecap="round"/>
+              <path d="M30 136C68 142 82 106 64 84" stroke="#dc8638" stroke-width="12.500" stroke-dasharray="0 16 20 200"/>
+              <path d="M30 136C68 142 82 106 64 84" stroke="#2a2320" stroke-width="12.500" stroke-dasharray="0 52 20 200"/>
+            </g>
+            <path d="M-37 140C-46 100-28 68 0 68S46 100 37 140C24 151-24 151-37 140Z" fill="#fbf6ec"/>
+            <g clip-path="url(#catBodyShape)">
+              <path d="M-50 66H-10C-12 88-28 108-50 112Z" fill="#dc8638"/>
+              <path d="M50 92C34 94 22 112 20 152H50Z" fill="#2a2320"/>
+              <path d="M-50 126C-34 120-22 130-20 152H-50Z" fill="#2a2320"/>
+              <path d="M22 74C30 72 38 76 44 84 34 90 24 86 22 74Z" fill="#dc8638"/>
+            </g>
+            <path d="M-37 140C-46 100-28 68 0 68S46 100 37 140C24 151-24 151-37 140Z" fill="none" stroke="#c9bba6" stroke-width="1.500"/>
+            <ellipse cx="-14" cy="142" rx="14" ry="9" fill="#fbf6ec" stroke="#c9bba6" stroke-width="1.500"/>
+            <ellipse cx="14" cy="142" rx="14" ry="9" fill="#dc8638" stroke="#c9bba6" stroke-width="1.500"/>
+            <path d="M-38 28-43-6-10 10Z" fill="#2a2320"/>
+            <path d="M38 28 43-6 10 10Z" fill="#dc8638"/>
+            <path d="M-34 18-37 3-21 11ZM34 18 37 3 21 11Z" fill="#eebba8"/>
+            <ellipse cx="0" cy="44" rx="45" ry="39" fill="#fbf6ec"/>
+            <g clip-path="url(#catHeadShape)">
+              <path d="M-50 0H-3C-5 18-7 32-12 44-22 54-40 54-50 48Z" fill="#2a2320"/>
+              <path d="M50 0H3C5 18 7 32 12 44 22 54 40 52 50 44Z" fill="#dc8638"/>
+            </g>
+            <ellipse cx="0" cy="44" rx="45" ry="39" fill="none" stroke="#c9bba6" stroke-width="1.500"/>
+            <ellipse cx="-9" cy="57" rx="12" ry="9" fill="#fbf6ec"/>
+            <ellipse cx="9" cy="57" rx="12" ry="9" fill="#fbf6ec"/>
+            <g id="catEyes">
+              <ellipse cx="-17" cy="37" rx="8" ry="7" fill="#9dbb5a"/>
+              <ellipse cx="17" cy="37" rx="8" ry="7" fill="#9dbb5a"/>
+              <ellipse cx="-17" cy="37" rx="3" ry="6" fill="#1f160e"/>
+              <ellipse cx="17" cy="37" rx="3" ry="6" fill="#1f160e"/>
+              <circle cx="-15" cy="34.500" r="1.500" fill="#fff"/>
+              <circle cx="19" cy="34.500" r="1.500" fill="#fff"/>
+            </g>
+            <path d="M-4 49H4L0 54Z" fill="#c8705f"/>
+            <path d="M0 54C-1 59-6 61-10 58M0 54C1 59 6 61 10 58" fill="none" stroke="#3d2818" stroke-width="2" stroke-linecap="round"/>
+            <path d="M-22 53-44 49M-22 59-44 61M22 53 44 49M22 59 44 61" stroke="#3d2818" stroke-width="1.300" stroke-linecap="round"/>
+          </g>
+        </g>
+        <g class="stateA" fill="none">
+          <path d="M254 236c26 2 42-12 36-38-3-12-16-12-18-1" stroke="#c9bba6" stroke-width="15.500" stroke-linecap="round"/>
+          <path d="M254 236c26 2 42-12 36-38-3-12-16-12-18-1" stroke="#fbf6ec" stroke-width="13" stroke-linecap="round"/>
+          <path d="M254 236c26 2 42-12 36-38-3-12-16-12-18-1" stroke="#dc8638" stroke-width="13" stroke-dasharray="0 14 16 12 0 14"/>
+          <path d="M254 236c26 2 42-12 36-38-3-12-16-12-18-1" stroke="#2a2320" stroke-width="13" stroke-dasharray="0 44 16 200"/>
+        </g>
+        <g id="boxFront">
+          <rect x="60" y="156" width="200" height="112" rx="8" fill="#a56f49"/>
+          <g class="stateA" fill="#fff4e4" opacity=".28">
+            <circle cx="160" cy="218" r="30"/>
+            <path d="M136 206l-4-24 22 13zM184 206l4-24-22 13z"/>
+          </g>
+          <g id="lid"><rect x="50" y="130" width="220" height="30" rx="8" fill="#bd8559"/></g>
+        </g>
+        <g id="catFront"></g>
+      </svg>
+    </button>
+    <div id="note"></div>
+  </section>
+
+  <div id="fail" role="alert"></div>
+
+<script>
+/* ============ Insults ============ */
+const INSULTS = [
+  "that was a brick. try again.",
+  "wow, and you call yourself competitive",
+  "that was embarrassing for both of us",
+  "back to the start. take your time. you clearly need it.",
+  "come on, you can do better than that.",
+];
+const WAIT_MS = 20000;
+const FAIL_MS = 2600;               // how long an insult stays on screen
+
+const BOB_IMAGE = "pieces/f.png";
+const LOOKALIKES = ["a", "b", "c", "d", "e", "g", "h", "i", "j"].map((n) => `pieces/${n}.png`);
+const LOOKALIKE_COPIES = 3;         // how many of each appear in the pile
+const TOOLS = ["⛑️", "🚧", "🔨", "🔧", "🧱", "🪛", "🪚", "🏗️", "🪜", "⚒️", "🛠️", "🚜", "👷", "🦺", "🧰", "⛏️", "🪓", "🔩"];
+const TOOL_COUNT = 62;
+const BOB_VISIBLE = [.4, .8];       // share of Bob's body showing. Lower is harder.
+const BOB_FACE_VISIBLE = .75;       // share of his hard hat and face that must show. Lower is harder.
+
+/* Generated values. */
+const PUZZLE_DATA = {"word":"ExoIFBU=","note":"OgAHTh8MGhwKWTAMGhy61QsbAB4GHVUdWQAOBk8=","checks":["1bhia1kkfgw"]};
+/* =========================================== */
+
+const $ = (id) => document.getElementById(id);
+const FADE = 400;
+const ORDER = { find: 0, ask: 1, word: 2, wait: 2, open: 3 };
+let current = null, nav = 0, locked = true, insultDeck = [], waitTimer = null;
+
+function unmask(b64, key) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes.map((b, i) => b ^ key.charCodeAt(i % key.length)));
+}
+function check(text) { // cyrb53
+  let a = 0xdeadbeef, b = 0x41c6ce57;
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677);
+  }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+  return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36);
+}
+const TARGET = unmask(PUZZLE_DATA.word, "puzzlebox");
+const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+
+/* ---------- moving between layers ---------- */
+const setup = { find: setupFind, ask: setupAsk, word: setupWord, wait: setupWait, open: setupOpen };
+
+function show(name) {
+  const token = ++nav, leaving = current && $(current);
+  locked = true;
+  if (leaving) leaving.classList.remove("visible");
+  setTimeout(() => {
+    if (token !== nav) return;
+    if (leaving) leaving.classList.remove("on");
+    current = name;
+    setup[name]();
+    document.body.dataset.theme = name;
+    document.querySelectorAll(".steps span").forEach((s, i) => s.classList.toggle("lit", i <= ORDER[name]));
+    const next = $(name);
+    next.classList.add("on");
+    void next.offsetWidth;
+    next.classList.add("visible");
+    window.scrollTo(0, 0);
+    locked = false;
+  }, leaving ? FADE : 0);
+}
+
+// Deals every line once in random order before reshuffling, and remembers the last
+// one shown so a refresh can't open with the same line.
+function nextInsult() {
+  let last = null;
+  try { last = localStorage.getItem("lastLine"); } catch {}
+  if (!insultDeck.length) {
+    insultDeck = [...INSULTS];
+    for (let i = insultDeck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [insultDeck[i], insultDeck[j]] = [insultDeck[j], insultDeck[i]];
+    }
+    if (insultDeck.length > 1 && insultDeck.at(-1) === last) insultDeck.unshift(insultDeck.pop());
+  }
+  const line = insultDeck.pop();
+  try { localStorage.setItem("lastLine", line); } catch {}
+  return line;
+}
+
+function fail() {
+  if (locked) return;
+  locked = true;
+  $("fail").textContent = nextInsult();
+  $("fail").classList.add("visible");
+  setTimeout(() => {
+    show("find");
+    setTimeout(() => $("fail").classList.remove("visible"), FADE + 100);
+  }, FAIL_MS);
+}
+
+/* ---------- Layer 1: the pile ----------
+   Every piece keeps a copy of its pixels, so a tap counts for the topmost piece
+   that is actually opaque there, not whichever transparent corner lies on top.
+   Coordinates are in tray widths: x runs 0 to 1, y runs 0 to TRAY_H. */
+const TRAY_H = 1.6;
+let sprites = { bob: null, lookalikes: [], tools: [] }, pile = [], bobPiece = null;
+
+function spriteFrom(source, w, h, url) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(source, 0, 0, w, h);
+  return { w, h, url, alpha: g.getImageData(0, 0, w, h).data };
+}
+function loadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(spriteFrom(img, img.naturalWidth, img.naturalHeight, url));
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+function emojiSprite(emoji) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.font = '100px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(emoji, 64, 70);
+  return spriteFrom(c, 128, 128, c.toDataURL());
+}
+const opaqueAt = (p, x, y) => {
+  const dx = x - p.x, dy = y - p.y, cos = Math.cos(p.rot), sin = Math.sin(p.rot);
+  const u = Math.floor((dx * cos + dy * sin) / p.k + p.s.w / 2);
+  const v = Math.floor((-dx * sin + dy * cos) / p.k + p.s.h / 2);
+  if (u < 0 || v < 0 || u >= p.s.w || v >= p.s.h) return false;
+  return p.s.alpha[(v * p.s.w + u) * 4 + 3] > 40;
+};
+function makePiece(s, size, x, y) {
+  return { s, x, y, k: size / Math.max(s.w, s.h), rot: rand(-.6, .6) };
+}
+function bobExposure(list, bob) { // how much of Bob's body and face is left uncovered
+  const above = list.slice(list.indexOf(bob) + 1);
+  const cos = Math.cos(bob.rot), sin = Math.sin(bob.rot);
+  let all = 0, seen = 0, face = 0, faceSeen = 0;
+  for (let v = 0; v < bob.s.h; v += 5) for (let u = 0; u < bob.s.w; u += 5) {
+    if (bob.s.alpha[(v * bob.s.w + u) * 4 + 3] <= 128) continue;
+    const lx = (u - bob.s.w / 2) * bob.k, ly = (v - bob.s.h / 2) * bob.k;
+    const x = bob.x + lx * cos - ly * sin, y = bob.y + lx * sin + ly * cos;
+    const open = !above.some((p) => opaqueAt(p, x, y));
+    all++; if (open) seen++;
+    // the hat and face sit in this part of Bob's picture
+    if (v < bob.s.h * .36 && u > bob.s.w * .28 && u < bob.s.w * .9) { face++; if (open) faceSeen++; }
+  }
+  return { total: seen / all, face: faceSeen / face };
+}
+function dealPile() {
+  const pool = [];
+  for (const s of sprites.lookalikes) for (let i = 0; i < LOOKALIKE_COPIES; i++) pool.push([s, rand(.24, .3)]);
+  for (let i = 0; i < TOOL_COUNT; i++) pool.push([sprites.tools[i % sprites.tools.length], rand(.15, .23)]);
+  // shuffle, then give each piece its own patch of the tray so the pile has no gaps
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const cols = 6, rows = Math.ceil(pool.length / cols);
+  const list = pool.map(([s, size], i) => makePiece(s, size,
+    ((i % cols) + Math.random()) / cols,
+    (Math.floor(i / cols) + Math.random()) / rows * TRAY_H
+  )).sort(() => Math.random() - .5);
+  const bob = makePiece(sprites.bob, .26, rand(.18, .82), rand(.2, TRAY_H - .2));
+  list.splice(Math.floor(list.length * rand(.55, .88)), 0, bob);
+  return { list, bob };
+}
+function setupFind() {
+  let dealt = null;
+  for (let tries = 0; tries < 400 && !dealt; tries++) {
+    const d = dealPile(), e = bobExposure(d.list, d.bob);
+    if (e.total >= BOB_VISIBLE[0] && e.total <= BOB_VISIBLE[1] && e.face >= BOB_FACE_VISIBLE) dealt = d;
+  }
+  if (!dealt) { // very unlikely: put Bob on top so he can never be buried
+    dealt = dealPile();
+    dealt.list.splice(dealt.list.indexOf(dealt.bob), 1);
+    dealt.list.push(dealt.bob);
+  }
+  pile = dealt.list; bobPiece = dealt.bob;
+  $("tray").replaceChildren(...pile.map((p) => {
+    const img = new Image();
+    img.src = p.s.url; img.alt = ""; img.draggable = false;
+    img.style.cssText = `left:${p.x * 100}%;top:${p.y / TRAY_H * 100}%;width:${p.s.w * p.k * 100}%;` +
+      `transform:translate(-50%,-50%) rotate(${p.rot}rad)`;
+    return img;
+  }));
+}
+$("tray").addEventListener("click", (e) => {
+  if (locked) return;
+  const r = $("tray").getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.width;
+  for (let i = pile.length - 1; i >= 0; i--) {
+    if (opaqueAt(pile[i], x, y)) {
+      if (pile[i] === bobPiece) show("ask"); else fail();
+      return;
+    }
+  }
+});
+
+/* ---------- Layer 2 ---------- */
+function setupAsk() { $("askInput").value = ""; }
+$("askForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (locked) return;
+  const answer = $("askInput").value.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!answer) return;
+  $("askInput").blur();
+  if (PUZZLE_DATA.checks.includes(check(answer))) show("word"); else fail();
+});
+
+/* ---------- Layer 3 ---------- */
+const WORD_LEN = 5, TRIES = 6;
+let rowIndex = 0, typed = "", revealing = false;
+
+$("board").append(...Array.from({ length: TRIES }, () => {
+  const row = document.createElement("div");
+  row.className = "row";
+  for (let i = 0; i < WORD_LEN; i++) {
+    const t = document.createElement("div");
+    t.className = "tile";
+    row.append(t);
+  }
+  return row;
+}));
+["qwertyuiop", "asdfghjkl", "+zxcvbnm-"].forEach((line) => {
+  const row = document.createElement("div");
+  row.className = "keyrow";
+  for (const ch of line) {
+    const k = document.createElement("button");
+    k.type = "button";
+    const key = ch === "+" ? "enter" : ch === "-" ? "back" : ch;
+    k.dataset.key = key;
+    k.textContent = ch === "+" ? "Enter" : ch === "-" ? "⌫" : ch;
+    if (key !== ch) k.classList.add("wide");
+    if (key === "back") k.setAttribute("aria-label", "Delete");
+    k.addEventListener("click", () => { press(key); k.blur(); });
+    row.append(k);
+  }
+  $("keys").append(row);
+});
+
+function setupWord() {
+  rowIndex = 0; typed = ""; revealing = false;
+  document.querySelectorAll(".tile").forEach((t) => { t.className = "tile"; t.textContent = ""; });
+  document.querySelectorAll("#keys button").forEach((k) => k.classList.remove("hit", "near", "miss"));
+}
+function drawRow() {
+  [...$("board").children[rowIndex].children].forEach((t, i) => { t.textContent = typed[i] ? typed[i].toUpperCase() : ""; });
+}
+function press(key) {
+  if (current !== "word" || locked || revealing) return;
+  if (key === "enter") return submitGuess();
+  if (key === "back") typed = typed.slice(0, -1);
+  else if (typed.length < WORD_LEN) typed += key;
+  drawRow();
+}
+function score(guess, target) {
+  const result = Array(WORD_LEN).fill("miss"), left = {};
+  for (let i = 0; i < WORD_LEN; i++) {
+    if (guess[i] === target[i]) result[i] = "hit";
+    else left[target[i]] = (left[target[i]] || 0) + 1;
+  }
+  for (let i = 0; i < WORD_LEN; i++) {
+    if (result[i] !== "hit" && left[guess[i]] > 0) { result[i] = "near"; left[guess[i]]--; }
+  }
+  return result;
+}
+function submitGuess() {
+  const row = $("board").children[rowIndex];
+  if (typed.length < WORD_LEN) {
+    row.classList.remove("shake");
+    void row.offsetWidth;
+    row.classList.add("shake");
+    return;
+  }
+  const guess = typed, result = score(guess, TARGET), tiles = [...row.children], rank = { miss: 0, near: 1, hit: 2 };
+  revealing = true;
+  tiles.forEach((t, i) => {
+    setTimeout(() => t.classList.add("flip"), i * 230);
+    setTimeout(() => {
+      t.classList.add(result[i]);
+      const k = document.querySelector(`#keys [data-key="${guess[i]}"]`);
+      const had = ["hit", "near", "miss"].find((c) => k.classList.contains(c));
+      if (!had || rank[result[i]] > rank[had]) {
+        k.classList.remove("hit", "near", "miss");
+        k.classList.add(result[i]);
+      }
+    }, i * 230 + 190);
+  });
+  setTimeout(() => {
+    revealing = false;
+    if (guess === TARGET) {
+      locked = true;
+      setTimeout(() => show("wait"), 1200);
+    } else if (rowIndex === TRIES - 1) {
+      fail();
+    } else {
+      rowIndex++; typed = "";
+    }
+  }, WORD_LEN * 230 + 450);
+}
+document.addEventListener("keydown", (e) => {
+  if (current !== "word" || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Enter") { e.preventDefault(); press("enter"); }
+  else if (e.key === "Backspace") press("back");
+  else if (/^[a-zA-Z]$/.test(e.key)) press(e.key.toLowerCase());
+});
+
+/* ---------- Loading: a router carves an LA scene into the plank ---------- */
+const PALM_CUTS = [
+  "M84 186C92 146 104 100 118 72",                          // trunk
+  "M100 186C106 146 114 102 124 74",
+  "M120 70C98 46 66 48 48 74C70 62 98 62 120 70Z",          // fronds
+  "M120 70C108 44 86 30 62 32C86 38 104 52 120 70Z",
+  "M120 70C132 44 154 30 178 32C156 38 136 52 120 70Z",
+  "M120 70C144 46 176 48 194 74C170 62 144 62 120 70Z",
+  "M120 70C98 74 80 90 74 116C88 96 104 82 120 70Z",
+  "M120 70C142 74 160 90 166 116C152 96 136 82 120 70Z",
+  "M54 186H130",                                            // ground
+];
+const LETTER_CUTS = [
+  "M212 30V130H295.600",                                    // L, whose foot is also the A's crossbar
+  "M238 190 276 66 314 190",                                // A
+];
+const CUTS = [...PALM_CUTS.map((d) => [d, 2.6]), ...LETTER_CUTS.map((d) => [d, 6])];
+const cutPaths = CUTS.map(([d, width]) => {
+  const make = (stroke, width, dy) => {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", d); p.setAttribute("stroke", stroke); p.setAttribute("stroke-width", width);
+    if (dy) p.setAttribute("transform", `translate(0 ${dy})`);
+    $("cuts").append(p);
+    return p;
+  };
+  const lit = make("#e8bd86", width, .9), dark = make("#2c1408", width, 0);
+  return { lit, dark };
+});
+const cutLengths = cutPaths.map(({ dark }) => dark.getTotalLength());
+const cutTotal = cutLengths.reduce((a, b) => a + b, 0);
+
+function drawCarving(progress) {
+  let left = progress * cutTotal, head = null;
+  cutPaths.forEach(({ lit, dark }, i) => {
+    const len = cutLengths[i], done = Math.max(0, Math.min(len, left));
+    const dash = done > 0 ? `${done} ${len + 1}` : `0 ${len + 1}`;
+    lit.style.strokeDasharray = dash;
+    dark.style.strokeDasharray = dash;
+    lit.style.opacity = dark.style.opacity = done > 0 ? 1 : 0;
+    if (left > 0 && left <= len) head = dark.getPointAtLength(left);
+    left -= len;
+  });
+  if (!head) head = progress <= 0 ? cutPaths[0].dark.getPointAtLength(0) : cutPaths.at(-1).dark.getPointAtLength(cutLengths.at(-1));
+  $("tool").setAttribute("transform", `translate(${head.x} ${head.y})`);
+  return head;
+}
+function throwChip(at) {
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  c.setAttribute("width", rand(1.2, 3)); c.setAttribute("height", rand(1, 2));
+  c.setAttribute("fill", Math.random() < .5 ? "#f3d09c" : "#c9935c");
+  $("chips").append(c);
+  const dx = rand(-22, 22), dy = rand(-20, 12);
+  c.animate(
+    [{ transform: `translate(${at.x}px,${at.y}px)`, opacity: 1 },
+     { transform: `translate(${at.x + dx}px,${at.y + dy}px) rotate(${rand(90, 500)}deg)`, opacity: 0 }],
+    { duration: rand(350, 800), easing: "cubic-bezier(.2,.7,.4,1)" }
+  ).onfinish = () => c.remove();
+}
+function setupWait() {
+  clearInterval(waitTimer);
+  $("chips").replaceChildren();
+  const start = Date.now();
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const tick = () => {
+    const t = Math.min(1, (Date.now() - start) / WAIT_MS), pct = t * 100;
+    const head = drawCarving(t);
+    if (!reduced && t < 1) throwChip(head);
+    $("barFill").style.width = pct + "%";
+    $("pct").textContent = Math.floor(pct) + "%";
+    $("bar").setAttribute("aria-valuenow", Math.floor(pct));
+    if (t >= 1) { clearInterval(waitTimer); show("open"); }
+  };
+  tick();
+  waitTimer = setInterval(tick, 60);
+}
+
+/* ---------- Layer 4: the cat climbs out, hops down, and the box goes away ---------- */
+const CAT_HIDDEN = "translate(160px, 170px)";
+const noMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const pause = (ms) => new Promise((r) => setTimeout(r, noMotion() ? 0 : ms));
+async function moveCat(keyframes, duration, easing) {
+  const cat = $("cat");
+  const a = cat.animate(keyframes.map((k) => (typeof k === "string" ? { transform: k } : k)),
+    { duration: noMotion() ? 1 : duration, easing, fill: "forwards" });
+  await a.finished;
+  cat.style.transform = (keyframes.at(-1).transform || keyframes.at(-1));
+  a.cancel();
+}
+function setupOpen() {
+  $("open").classList.remove("opened", "settled");
+  $("note").classList.remove("visible");
+  $("catBehind").append($("cat"));
+  $("cat").style.transform = CAT_HIDDEN;
+  for (const part of ["boxBack", "boxFront"]) $(part).style.display = "";
+  $("boxBtn").disabled = false;
+}
+$("boxBtn").addEventListener("click", async () => {
+  if (locked) return;
+  $("boxBtn").disabled = true;
+  $("open").classList.add("opened");
+  await pause(800);
+  // peek over the rim, then climb until the paws clear it
+  await moveCat([CAT_HIDDEN, "translate(160px, 62px)"], 1300, "cubic-bezier(.2,.8,.3,1)");
+  await pause(600);
+  await moveCat(["translate(160px, 62px)", "translate(160px, -4px)"], 650, "cubic-bezier(.3,.7,.3,1)");
+  // now fully above the box, so it can pass in front of it on the way down
+  $("catFront").append($("cat"));
+  await moveCat([
+    { transform: "translate(160px, -4px)", easing: "cubic-bezier(.2,.7,.4,1)" },
+    { transform: "translate(160px, -30px)", offset: .3, easing: "cubic-bezier(.6,0,.9,.5)" },
+    { transform: "translate(160px, 128px)" },
+  ], 850, "linear");
+  await pause(350);
+  const away = [{ opacity: 1, transform: "translateY(0)" }, { opacity: 0, transform: "translateY(14px)" }];
+  const fades = ["boxBack", "boxFront"].map((part) =>
+    $(part).animate(away, { duration: noMotion() ? 1 : 1200, easing: "ease", fill: "forwards" }));
+  await moveCat(["translate(160px, 128px)", "translate(160px, 86px) scale(1.5)"], 1500, "cubic-bezier(.4,0,.2,1)");
+  await Promise.all(fades.map((f) => f.finished));
+  for (const part of ["boxBack", "boxFront"]) $(part).style.display = "none";
+  fades.forEach((f) => f.cancel());
+  $("open").classList.add("settled");
+  $("note").textContent = unmask(PUZZLE_DATA.note, TARGET);
+  $("note").classList.add("visible");
+  $("note").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+
+/* ---------- start ---------- */
+Promise.all([loadImage(BOB_IMAGE), ...LOOKALIKES.map(loadImage)]).then(([bob, ...rest]) => {
+  sprites.bob = bob || emojiSprite("👷");
+  sprites.lookalikes = rest.filter(Boolean);
+  sprites.tools = TOOLS.map(emojiSprite);
+  show("find");
+});
+</script>
+</body>
+</html>
